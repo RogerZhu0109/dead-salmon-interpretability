@@ -28,7 +28,7 @@ def _():
     return (mo,)
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
     # The Dead Salmons of AI Interpretability
@@ -66,7 +66,7 @@ def _(mo):
     return
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
     ## 1. Setup: a randomly-initialized BERT
@@ -94,24 +94,38 @@ def _():
     import torch
     from scipy import stats
     from sklearn.decomposition import PCA
+    from sklearn.linear_model import LogisticRegression
+    from sklearn.metrics import confusion_matrix
+    from sklearn.model_selection import StratifiedKFold, train_test_split
+    from sklearn.pipeline import Pipeline
+    from sklearn.preprocessing import StandardScaler
 
-    return PCA, np, plt, stats, torch
+    return (
+        LogisticRegression,
+        PCA,
+        Pipeline,
+        StandardScaler,
+        StratifiedKFold,
+        confusion_matrix,
+        np,
+        plt,
+        stats,
+        torch,
+        train_test_split,
+    )
 
 
 @app.cell
 def _(mo):
-    # Interactive controls for the setup pipeline.
     seed_ui = mo.ui.slider(
         start=0, stop=99, step=1, value=0, label="Random init seed"
     )
     n_samples_ui = mo.ui.slider(
-        start=50, stop=500, step=50, value=300, label="Number of IMDb sentences"
+        start=50, stop=1000, step=50, value=1000, label="Number of IMDb sentences"
     )
     pool_ui = mo.ui.dropdown(
         options=["mean", "cls", "max"], value="mean", label="Pooling"
     )
-
-    mo.hstack([seed_ui, n_samples_ui, pool_ui])
     return n_samples_ui, pool_ui, seed_ui
 
 
@@ -230,7 +244,7 @@ def _(imdb, mo, pool_ui, random_bert, tokenizer, torch):
     return X, y
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
     ## 2. Artifact A — PCA components that "explain" sentiment
@@ -275,21 +289,21 @@ def _(mo):
 
 
 @app.cell
-def _(mo, n_samples_ui):
-    # Local controls for Section 2. The subsample slider lets users sweep n
-    # without re-embedding — we take a deterministic prefix of a fixed random
-    # permutation, so growing n always adds samples rather than resampling.
-    # The global "Number of IMDb sentences" slider caps how many are
-    # available; we clamp at use time.
+def _(mo, n_samples_ui, pool_ui, seed_ui):
     pca_n_ui = mo.ui.slider(
-        start=30, stop=500, step=10, value=60,
+        start=30, stop=1000, step=10, value=60,
         label=f"Sample size for PCA (n, max {n_samples_ui.value})",
     )
     pca_k_ui = mo.ui.slider(
         start=2, stop=10, step=1, value=6,
         label="Principal components",
     )
-    mo.hstack([pca_n_ui, pca_k_ui])
+    mo.vstack([
+        mo.md("**Embedding controls** — change these to reload embeddings (slow)"),
+        mo.hstack([seed_ui, n_samples_ui, pool_ui]),
+        mo.md("**PCA controls** — fast, no re-embedding"),
+        mo.hstack([pca_n_ui, pca_k_ui]),
+    ])
     return pca_k_ui, pca_n_ui
 
 
@@ -465,7 +479,7 @@ def _(PCA, X, np, pca_k_ui, plt, stats, y):
     return
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
     **What just happened.** In the sweep plot, a handful of PCs settle
@@ -495,21 +509,381 @@ def _(mo):
     return
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
     ## 3. Artifact B — a linear probe that "works"
 
     _Reproduces Figure 1B of the paper._
 
-    We train a logistic regression classifier on the random embeddings with
-    5-fold cross-validation and report accuracy. A probe on a truly random
-    network should sit at chance (50%). The paper reports the probe instead
-    lands around 60–65% — a difference that, with a tight confidence
-    interval over hundreds of samples, would conventionally be reported as
-    "highly significant."
+    The PCA section showed that *individual directions* in the random
+    embedding correlate with sentiment. The probe section shows the
+    stronger, scarier version: a **logistic regression** trained on those
+    embeddings with 5-fold cross-validation lands well above the 50%
+    chance line, with a tight confidence interval and a binomial
+    $p$-value against chance that is for all practical purposes zero.
 
-    **TODO** — implement in Day 2.
+    The paper's Figure 1B reports a probe at roughly $60$–$65\%$ accuracy
+    on a fully random transformer. By the standard interpretability
+    pipeline this is a finding: "the model has learned a sentiment
+    feature." But the model has not been trained. There is no feature.
+    What the probe is doing is fitting the marginal statistics of the
+    text — vocabulary, length, punctuation density — that any nonlinear
+    random projection inherits from its inputs. The probe is real; the
+    interpretation is not.
+
+    Two knobs below.
+
+    - **Probe regularization (log$_{10}$ C).** $C$ is sklearn's inverse-
+      regularization-strength: small $C$ means heavy $L_2$ shrinkage and
+      a simpler decision boundary, large $C$ lets the probe overfit.
+      The artifact survives across the whole range — *that* is the point.
+    - **Held-out test fraction.** A second, independent train/test split
+      (separate from the 5-fold CV) is used to draw the confusion matrix
+      and report a Wilson 95% CI on a single held-out slice. Smaller test
+      fraction means a tighter probe but a noisier held-out estimate.
+
+    Underneath, the embedding controls (seed, sample size, pooling) at
+    the top of section 1 still apply — change them to swap in a different
+    dead salmon.
+    """)
+    return
+
+
+@app.cell
+def _(mo, n_samples_ui, pool_ui, seed_ui):
+    log10_C_ui = mo.ui.slider(
+        start=-3, stop=2, step=0.25, value=0,
+        label="Probe regularization (log10 C)",
+        show_value=True,
+    )
+    test_size_ui = mo.ui.slider(
+        start=0.1, stop=0.5, step=0.05, value=0.2,
+        label="Held-out test fraction",
+        show_value=True,
+    )
+    mo.vstack([
+        mo.md("**Embedding controls** — change these to reload embeddings (slow)"),
+        mo.hstack([seed_ui, n_samples_ui, pool_ui]),
+        mo.md("**Probe controls** — fast, no re-embedding"),
+        mo.hstack([log10_C_ui, test_size_ui]),
+    ])
+    return log10_C_ui, test_size_ui
+
+
+@app.cell
+def _(
+    LogisticRegression,
+    Pipeline,
+    StandardScaler,
+    StratifiedKFold,
+    X,
+    confusion_matrix,
+    log10_C_ui,
+    mo,
+    np,
+    stats,
+    test_size_ui,
+    train_test_split,
+    y,
+):
+    # Logistic-regression probe behind a StandardScaler. Scaling is
+    # standard practice in probing work and stabilizes liblinear's
+    # convergence across the C sweep; the artifact shows up either way.
+    def _make_probe(C):
+        return Pipeline([
+            ("scale", StandardScaler(with_mean=True, with_std=True)),
+            ("lr", LogisticRegression(
+                C=C, max_iter=2000, solver="liblinear",
+            )),
+        ])
+
+    @mo.cache
+    def probe_cv(X_arr, y_arr, log10_C, n_splits=5):
+        # 5-fold stratified CV. Returns the per-fold accuracies so the
+        # downstream cell can plot them and compute a t-based 95% CI.
+        C = float(10 ** log10_C)
+        skf = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=0)
+        accs = np.empty(n_splits)
+        for _i, (_tr, _te) in enumerate(skf.split(X_arr, y_arr)):
+            _clf = _make_probe(C)
+            _clf.fit(X_arr[_tr], y_arr[_tr])
+            accs[_i] = _clf.score(X_arr[_te], y_arr[_te])
+        return accs
+
+    @mo.cache
+    def probe_holdout(X_arr, y_arr, log10_C, test_size):
+        # Independent train/test split, separate from the CV above.
+        # We use it to draw a confusion matrix and report a Wilson CI on
+        # a single held-out slice.
+        C = float(10 ** log10_C)
+        Xtr, Xte, ytr, yte = train_test_split(
+            X_arr, y_arr,
+            test_size=test_size, stratify=y_arr, random_state=0,
+        )
+        clf = _make_probe(C)
+        clf.fit(Xtr, ytr)
+        yhat = clf.predict(Xte)
+        return float((yhat == yte).mean()), confusion_matrix(yte, yhat), len(yte)
+
+    fold_accs = probe_cv(X, y, log10_C_ui.value, n_splits=5)
+    cv_mean = float(fold_accs.mean())
+    cv_sem = float(fold_accs.std(ddof=1) / np.sqrt(len(fold_accs)))
+    cv_ci_lo, cv_ci_hi = stats.t.interval(
+        0.95, df=len(fold_accs) - 1, loc=cv_mean,
+        scale=max(cv_sem, 1e-12),
+    )
+
+    holdout_acc, cm, n_test = probe_holdout(
+        X, y, log10_C_ui.value, float(test_size_ui.value),
+    )
+    n_correct = int(round(holdout_acc * n_test))
+    binom = stats.binomtest(n_correct, n_test, p=0.5, alternative="two-sided")
+    holdout_ci = binom.proportion_ci(confidence_level=0.95, method="wilson")
+
+    mo.md(
+        f"**5-fold CV accuracy:** **{cv_mean:.3f}** "
+        f"(95% CI [{cv_ci_lo:.3f}, {cv_ci_hi:.3f}], chance = 0.500). "
+        f"**Held-out accuracy** on {n_test} samples: **{holdout_acc:.3f}** "
+        f"(Wilson 95% CI [{holdout_ci.low:.3f}, {holdout_ci.high:.3f}]). "
+        f"Binomial $p$ vs chance: **{binom.pvalue:.2e}**."
+    )
+    return (
+        binom,
+        cm,
+        cv_ci_hi,
+        cv_ci_lo,
+        cv_mean,
+        fold_accs,
+        holdout_acc,
+        n_test,
+    )
+
+
+@app.cell
+def _(
+    binom,
+    cm,
+    cv_ci_hi,
+    cv_ci_lo,
+    cv_mean,
+    fold_accs,
+    holdout_acc,
+    log10_C_ui,
+    n_test,
+    np,
+    plt,
+):
+    _fig, (_ax1, _ax2) = plt.subplots(1, 2, figsize=(10, 4.2))
+
+    # Left: per-fold accuracies as dots, mean line, 95% CI band, chance line.
+    _xs = np.arange(1, len(fold_accs) + 1)
+    _ax1.fill_between(
+        [0.5, len(fold_accs) + 0.5], cv_ci_lo, cv_ci_hi,
+        color="#1f77b4", alpha=0.18, label="mean 95% CI",
+    )
+    _ax1.axhline(
+        cv_mean, color="#1f77b4", linewidth=2,
+        label=f"mean = {cv_mean:.3f}",
+    )
+    _ax1.axhline(
+        0.5, color="k", linewidth=0.9, linestyle="--", label="chance",
+    )
+    _ax1.scatter(
+        _xs, fold_accs, s=90, color="#1f77b4", zorder=3,
+        edgecolor="white", linewidth=1.4,
+    )
+    for _i, _a in enumerate(fold_accs):
+        _ax1.text(
+            _i + 1, _a + 0.012, f"{_a:.3f}",
+            ha="center", fontsize=8, color="#1f77b4",
+        )
+    _ax1.set_xticks(_xs)
+    _ax1.set_xlim(0.5, len(fold_accs) + 0.5)
+    _ymin = min(0.45, float(fold_accs.min()) - 0.05)
+    _ymax = max(0.75, float(fold_accs.max()) + 0.06)
+    _ax1.set_ylim(_ymin, _ymax)
+    _ax1.set_xlabel("Fold")
+    _ax1.set_ylabel("Accuracy")
+    _ax1.set_title(
+        f"5-fold CV  (log$_{{10}}$ C = {log10_C_ui.value:.2f})"
+    )
+    _ax1.legend(loc="lower right", fontsize=8, framealpha=0.9)
+    _ax1.grid(True, axis="y", alpha=0.3)
+
+    # Right: confusion matrix from the independent held-out split.
+    _ax2.imshow(cm, cmap="Blues", aspect="equal")
+    _ax2.set_xticks([0, 1])
+    _ax2.set_yticks([0, 1])
+    _ax2.set_xticklabels(["neg", "pos"])
+    _ax2.set_yticklabels(["neg", "pos"])
+    _ax2.set_xlabel("Predicted")
+    _ax2.set_ylabel("True")
+    _ax2.set_title(
+        f"Held-out  (n = {n_test}, acc = {holdout_acc:.3f}, "
+        f"p = {binom.pvalue:.1e})"
+    )
+    _vmax = float(cm.max())
+    for _i in range(2):
+        for _j in range(2):
+            _val = int(cm[_i, _j])
+            _ax2.text(
+                _j, _i, f"{_val}",
+                ha="center", va="center",
+                color="white" if _val > _vmax / 2 else "black",
+                fontsize=15, fontweight="bold",
+            )
+
+    _fig.tight_layout()
+    _fig
+    return
+
+
+@app.cell
+def _(
+    LogisticRegression,
+    Pipeline,
+    StandardScaler,
+    StratifiedKFold,
+    X,
+    log10_C_ui,
+    mo,
+    np,
+    stats,
+    y,
+):
+    # Sweep accuracy as a function of training-set size, holding the probe
+    # complexity (C) and embedding fixed. Mirrors §2: the dead-salmon
+    # signature is that "significance" against chance grows with n, even
+    # though nothing about the network has changed. Subsamples are
+    # balanced (n/2 positive, n/2 negative) so chance stays at exactly 0.5.
+    @mo.cache
+    def probe_n_sweep(X_arr, y_arr, log10_C, n_points=12, n_min=60):
+        C = float(10 ** log10_C)
+        N = len(y_arr)
+        n_min_eff = min(n_min, N)
+        ns = np.unique(
+            np.linspace(n_min_eff, N, n_points).astype(int)
+        )
+        ns = ns[ns >= 20]
+
+        rng = np.random.default_rng(0)
+        pos_idx = np.where(y_arr == 1)[0]
+        neg_idx = np.where(y_arr == 0)[0]
+        rng.shuffle(pos_idx)
+        rng.shuffle(neg_idx)
+
+        means = np.empty(len(ns))
+        ci_lo = np.empty(len(ns))
+        ci_hi = np.empty(len(ns))
+        for _i, _n in enumerate(ns):
+            _half = int(_n) // 2
+            _idx = np.concatenate([pos_idx[:_half], neg_idx[:_half]])
+            _Xs = X_arr[_idx]
+            _ys = y_arr[_idx]
+            _skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=0)
+            _accs = np.empty(5)
+            for _k, (_tr, _te) in enumerate(_skf.split(_Xs, _ys)):
+                _clf = Pipeline([
+                    ("scale", StandardScaler()),
+                    ("lr", LogisticRegression(
+                        C=C, max_iter=2000, solver="liblinear",
+                    )),
+                ])
+                _clf.fit(_Xs[_tr], _ys[_tr])
+                _accs[_k] = _clf.score(_Xs[_te], _ys[_te])
+            _m = float(_accs.mean())
+            _sem = float(_accs.std(ddof=1) / np.sqrt(5))
+            _lo, _hi = stats.t.interval(
+                0.95, df=4, loc=_m, scale=max(_sem, 1e-12),
+            )
+            means[_i] = _m
+            ci_lo[_i] = _lo
+            ci_hi[_i] = _hi
+        return ns, means, ci_lo, ci_hi
+
+    sweep_ns, sweep_means, sweep_lo, sweep_hi = probe_n_sweep(
+        X, y, log10_C_ui.value,
+    )
+    return sweep_hi, sweep_lo, sweep_means, sweep_ns
+
+
+@app.cell
+def _(log10_C_ui, np, plt, stats, sweep_hi, sweep_lo, sweep_means, sweep_ns):
+    # 95% null band: under chance = 0.5 the count of correct predictions
+    # on n samples is Binomial(n, 0.5). The 2.5/97.5 percentiles of that
+    # over n give a band that any "real" probe must escape to be called
+    # significant at p < 0.05. Curves above the band are dead salmons.
+    _null_lo = np.array(
+        [stats.binom.ppf(0.025, int(_n), 0.5) / _n for _n in sweep_ns]
+    )
+    _null_hi = np.array(
+        [stats.binom.ppf(0.975, int(_n), 0.5) / _n for _n in sweep_ns]
+    )
+
+    _fig, _ax = plt.subplots(figsize=(8.5, 4.5))
+    _ax.fill_between(
+        sweep_ns, _null_lo, _null_hi,
+        color="gray", alpha=0.22,
+        label="null: 95% binomial band at chance",
+    )
+    _ax.axhline(0.5, color="gray", lw=0.8, linestyle="--")
+    _ax.fill_between(
+        sweep_ns, sweep_lo, sweep_hi,
+        color="#d62728", alpha=0.22, label="probe 95% CI",
+    )
+    _ax.plot(
+        sweep_ns, sweep_means,
+        color="#d62728", marker="o", lw=1.6, markersize=5,
+        label="probe mean (5-fold CV)",
+    )
+    _ax.set_xlabel("Number of training sentences (n, balanced)")
+    _ax.set_ylabel("5-fold CV accuracy")
+    _ax.set_ylim(
+        min(0.4, float(sweep_lo.min()) - 0.03),
+        max(0.8, float(sweep_hi.max()) + 0.03),
+    )
+    _ax.set_title(
+        f"Probe accuracy escapes the null band as $n$ grows  "
+        f"(log$_{{10}}$ C = {log10_C_ui.value:.2f})"
+    )
+    _ax.legend(loc="lower right", fontsize=9)
+    _ax.grid(True, alpha=0.3)
+    _fig.tight_layout()
+    _fig
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    **What just happened.** A logistic-regression probe on a random
+    BERT's embeddings achieves clearly-above-chance accuracy. The 95%
+    confidence interval over 5 folds excludes 50%. The binomial
+    $p$-value against chance on the held-out split is for all practical
+    purposes zero. By every conventional standard this is a "successful"
+    probe — and yet the network has been trained on nothing.
+
+    The sweep plot makes the dead-salmon dynamic vivid: at small $n$ the
+    probe sits inside the null band (you cannot reject chance); as $n$
+    grows the mean and its CI lift cleanly above. What's growing is
+    statistical resolution, not real signal. The probe is fitting
+    spurious structure that the random projection inherits from the
+    data's marginal statistics — token frequencies, sequence length,
+    punctuation density, and the like.
+
+    Try cranking $\log_{10} C$ to either extreme: heavy regularization
+    ($C \!\to\! 0$) shrinks the probe toward a near-mean classifier and
+    only marginally hurts accuracy, while $C \!\to\! \infty$ lets the
+    probe overfit hard without paying much of a generalization cost on
+    a dataset this small. The artifact lives in the embedding geometry,
+    not in the probe's degrees of freedom.
+
+    Section 4 implements the paper's fix: don't compare to chance —
+    compare to a **null distribution** built from many independent
+    random initializations of the same architecture. If the observed
+    accuracy falls inside that null, the probe has not learned anything
+    that random computation could not have produced on its own.
     """)
     return
 
