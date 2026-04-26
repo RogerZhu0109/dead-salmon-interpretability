@@ -53,7 +53,7 @@ def _(mo):
     dead-salmon crisis. Feature attribution, linear probes, sparse
     autoencoders, and circuit discovery can all produce plausible-looking,
     statistically-significant "explanations" when applied to neural networks
-    that have learned **nothing** — networks whose weights have just been
+    that have learned **nothing**, networks whose weights have just been
     randomly initialized.
 
     This notebook reproduces the paper's Figure 1 artifacts live in your
@@ -71,14 +71,14 @@ def _(mo):
     mo.md(r"""
     ## 1. Setup: a randomly-initialized BERT
 
-    We load a small BERT architecture (bert-mini dimensions: 4 layers,
+    I load a small BERT architecture (bert-mini dimensions: 4 layers,
     256 hidden, ~11M params) and then **throw away any pre-trained
     weights** — the model is instantiated from a config, so every weight
-    is freshly sampled from $\mathcal{N}(0, 0.02)$. This is our dead
+    is freshly sampled from $\mathcal{N}(0, 0.02)$. This is my dead
     salmon: a network that has seen no training data and cannot possibly
     have learned anything about language.
 
-    We extract token embeddings from a balanced sample of IMDb reviews
+    I extract token embeddings from a balanced sample of IMDb reviews
     and pool across the sequence to get one vector per document.
     Mean-pooling is the default because it captures per-document
     vocabulary variation most directly in a shallow random net (try the
@@ -132,7 +132,7 @@ def _(mo):
 @app.cell
 def _(mo, seed_ui):
     # Load a tiny BERT architecture and randomize the weights.
-    # We cache by the seed value so re-running downstream cells doesn't rebuild.
+    # I cache by the seed value so re-running downstream cells doesn't rebuild.
     # Imports live inside the cached function because mo.cache doesn't always
     # preserve closure capture over classes imported at cell scope.
     @mo.cache
@@ -141,7 +141,7 @@ def _(mo, seed_ui):
         from transformers import AutoModel, AutoTokenizer, BertConfig
 
         # bert-tiny ships no tokenizer files and its config.json predates the
-        # `model_type` field, so we build both by hand: bert-base-uncased's
+        # `model_type` field, so I build both by hand: bert-base-uncased's
         # WordPiece tokenizer (the vocab bert-tiny was trained for) and a
         # BertConfig with bert-tiny's dimensions.
         tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
@@ -170,8 +170,8 @@ def _(mo, seed_ui):
 
 @app.cell
 def _(mo, n_samples_ui):
-    # Load IMDb. In WASM we use the datasets library's streaming loader.
-    # For repeatability and speed we cache a curated, balanced sample.
+    # Load IMDb. In WASM I use the datasets library's streaming loader.
+    # For repeatability and speed I cache a curated, balanced sample.
     import pandas as pd
 
     @mo.cache
@@ -251,10 +251,10 @@ def _(mo):
 
     _Reproduces Figure 1A of the paper._
 
-    Here's the first dead-salmon finding. We run PCA on the random-BERT
+    Here's the first dead-salmon finding. I run PCA on the random-BERT
     embeddings, keep a pool of components, and **rank them by the
     absolute correlation of each PC with the binary sentiment label**.
-    Then we look at the top-ranked few. This is the interpretability
+    Then I look at the top-ranked few. This is the interpretability
     researcher's move: you don't stop at the variance-top PCs, you hunt
     for directions that "look meaningful" — correlations with the
     concept you already care about. Pearson's $r$ plus the textbook
@@ -289,7 +289,10 @@ def _(mo):
 
 
 @app.cell
-def _(mo, n_samples_ui, pool_ui, seed_ui):
+def _(mo, n_samples_ui):
+    # Silent slider definitions. They render next to their plots below so
+    # the reader doesn't have to scroll. Marimo syncs duplicate displays
+    # of the same UI object, so this stays consistent everywhere.
     pca_n_ui = mo.ui.slider(
         start=30, stop=1000, step=10, value=60,
         label=f"Sample size for PCA (n, max {n_samples_ui.value})",
@@ -298,12 +301,6 @@ def _(mo, n_samples_ui, pool_ui, seed_ui):
         start=2, stop=10, step=1, value=6,
         label="Principal components",
     )
-    mo.vstack([
-        mo.md("**Embedding controls** — change these to reload embeddings (slow)"),
-        mo.hstack([seed_ui, n_samples_ui, pool_ui]),
-        mo.md("**PCA controls** — fast, no re-embedding"),
-        mo.hstack([pca_n_ui, pca_k_ui]),
-    ])
     return pca_k_ui, pca_n_ui
 
 
@@ -315,7 +312,7 @@ def _(PCA, X, mo, np, pca_k_ui, pca_n_ui, stats, y):
     # at the variance-top PCs, you look for directions that correlate
     # with the concept you care about. The paper's argument is that this
     # post-hoc selection inflates |r| by multiple-comparisons on its own
-    # — and that's the artifact we want to surface.
+    # — and that's the artifact I want to surface.
     k_pool = min(30, X.shape[1], X.shape[0] - 1)
     _pca = PCA(n_components=k_pool)
     _Z_full = _pca.fit_transform(X)
@@ -359,7 +356,24 @@ def _(PCA, X, mo, np, pca_k_ui, pca_n_ui, stats, y):
 
 
 @app.cell
-def _(Z, k_use, n_use, np, pc_p, pc_r, plt, top_idx, var_ratio, y_sub):
+def _(
+    Z,
+    k_use,
+    mo,
+    n_samples_ui,
+    n_use,
+    np,
+    pc_p,
+    pc_r,
+    pca_k_ui,
+    pca_n_ui,
+    plt,
+    pool_ui,
+    seed_ui,
+    top_idx,
+    var_ratio,
+    y_sub,
+):
     # Two-panel figure at the current n. Bars are the |r|-ranked top PCs
     # (red when p<0.05), labeled by their original variance rank so the
     # cherry-picking is visible. Scatter shows the two strongest by |r|.
@@ -396,12 +410,17 @@ def _(Z, k_use, n_use, np, pc_p, pc_r, plt, top_idx, var_ratio, y_sub):
     )
     _ax2.set_title("Top two PCs by |r|, colored by sentiment")
     _fig.tight_layout()
-    _fig
+    mo.vstack([
+        mo.md("**Controls** — embedding (top row, slow to recompute) and PCA (bottom row, instant)."),
+        mo.hstack([seed_ui, n_samples_ui, pool_ui]),
+        mo.hstack([pca_n_ui, pca_k_ui]),
+        _fig,
+    ])
     return
 
 
 @app.cell
-def _(PCA, X, np, pca_k_ui, plt, stats, y):
+def _(PCA, X, mo, np, pca_k_ui, plt, stats, y):
     # Sweep n with PC directions LOCKED: fit PCA once on the full embedding
     # matrix, then for each n compute r, p for every fixed PC on the
     # prefix subsample. Because the axes don't rotate under subsampling,
@@ -475,7 +494,11 @@ def _(PCA, X, np, pca_k_ui, plt, stats, y):
     _ax2.legend(fontsize=7, ncol=2, loc="lower left")
 
     _fig.tight_layout()
-    _fig
+    mo.vstack([
+        mo.md("**Controls** — number of PCs to track in the sweep."),
+        mo.hstack([pca_k_ui]),
+        _fig,
+    ])
     return
 
 
@@ -491,10 +514,10 @@ def _(mo):
     correlation that looks unremarkable at $n = 30$ is "highly
     significant" at $n = 500$.
 
-    Nothing about the network changed. Nothing about the data changed. We
+    Nothing about the network changed. Nothing about the data changed. I
     just collected more of it, and the standard null-hypothesis test
     rejected a null that — in the paper's framing — is the wrong null to
-    begin with. Our random BERT cannot have learned anything about
+    begin with. My random BERT cannot have learned anything about
     sentiment, but its embeddings are **not** isotropic noise: they are
     the output of a nonlinear random projection, and that projection
     inherits small but systematic covariance with any downstream label
@@ -551,7 +574,8 @@ def _(mo):
 
 
 @app.cell
-def _(mo, n_samples_ui, pool_ui, seed_ui):
+def _(mo):
+    # Silent definitions; sliders render next to their plots below.
     log10_C_ui = mo.ui.slider(
         start=-3, stop=2, step=0.25, value=0,
         label="Probe regularization (log10 C)",
@@ -562,12 +586,6 @@ def _(mo, n_samples_ui, pool_ui, seed_ui):
         label="Held-out test fraction",
         show_value=True,
     )
-    mo.vstack([
-        mo.md("**Embedding controls** — change these to reload embeddings (slow)"),
-        mo.hstack([seed_ui, n_samples_ui, pool_ui]),
-        mo.md("**Probe controls** — fast, no re-embedding"),
-        mo.hstack([log10_C_ui, test_size_ui]),
-    ])
     return log10_C_ui, test_size_ui
 
 
@@ -614,7 +632,7 @@ def _(
     @mo.cache
     def probe_holdout(X_arr, y_arr, log10_C, test_size):
         # Independent train/test split, separate from the CV above.
-        # We use it to draw a confusion matrix and report a Wilson CI on
+        # I use it to draw a confusion matrix and report a Wilson CI on
         # a single held-out slice.
         C = float(10 ** log10_C)
         Xtr, Xte, ytr, yte = train_test_split(
@@ -670,9 +688,14 @@ def _(
     fold_accs,
     holdout_acc,
     log10_C_ui,
+    mo,
+    n_samples_ui,
     n_test,
     np,
     plt,
+    pool_ui,
+    seed_ui,
+    test_size_ui,
 ):
     _fig, (_ax1, _ax2) = plt.subplots(1, 2, figsize=(10, 4.2))
 
@@ -735,7 +758,12 @@ def _(
             )
 
     _fig.tight_layout()
-    _fig
+    mo.vstack([
+        mo.md("**Controls** — embedding (top row, slow) and probe (bottom row, instant)."),
+        mo.hstack([seed_ui, n_samples_ui, pool_ui]),
+        mo.hstack([log10_C_ui, test_size_ui]),
+        _fig,
+    ])
     return
 
 
@@ -809,7 +837,17 @@ def _(
 
 
 @app.cell
-def _(log10_C_ui, np, plt, stats, sweep_hi, sweep_lo, sweep_means, sweep_ns):
+def _(
+    log10_C_ui,
+    mo,
+    np,
+    plt,
+    stats,
+    sweep_hi,
+    sweep_lo,
+    sweep_means,
+    sweep_ns,
+):
     # 95% null band: under chance = 0.5 the count of correct predictions
     # on n samples is Binomial(n, 0.5). The 2.5/97.5 percentiles of that
     # over n give a band that any "real" probe must escape to be called
@@ -850,7 +888,11 @@ def _(log10_C_ui, np, plt, stats, sweep_hi, sweep_lo, sweep_means, sweep_ns):
     _ax.legend(loc="lower right", fontsize=9)
     _ax.grid(True, alpha=0.3)
     _fig.tight_layout()
-    _fig
+    mo.vstack([
+        mo.md("**Controls** — only the probe regularization affects this sweep."),
+        mo.hstack([log10_C_ui]),
+        _fig,
+    ])
     return
 
 
@@ -911,9 +953,9 @@ def _(mo):
     statistics produce on their own. The paper calls this **null
     hypothesis significance testing against random computation**.
 
-    We reseed the BERT $N$ times, rerun random-init → embed → 5-fold CV
+    I reseed the BERT $N$ times, rerun random-init → embed → 5-fold CV
     probe on each seed, and collect the resulting accuracies into an
-    empirical null. We overlay the **observed** accuracy at the current
+    empirical null. I overlay the **observed** accuracy at the current
     seed and report the empirical right-tail $p$-value
 
     $$
@@ -921,7 +963,7 @@ def _(mo):
     $$
 
     Because the "observed" network is itself just another random init,
-    this $p$-value should be approximately uniform on $[0, 1]$ — we
+    this $p$-value should be approximately uniform on $[0, 1]$ — I
     should **fail to reject** the correct null, even though the
     conventional chance-level null was rejected with overwhelming
     confidence. That gap is the fix working.
@@ -930,7 +972,8 @@ def _(mo):
 
 
 @app.cell
-def _(log10_C_ui, mo, pool_ui, seed_ui):
+def _(mo):
+    # Silent definitions; sliders render next to the histogram below.
     n_null_seeds_ui = mo.ui.slider(
         start=10, stop=100, step=5, value=30,
         label="Null seeds (N)", show_value=True,
@@ -939,18 +982,6 @@ def _(log10_C_ui, mo, pool_ui, seed_ui):
         start=100, stop=500, step=50, value=200,
         label="Sentences per seed", show_value=True,
     )
-    mo.vstack([
-        mo.md(
-            "**Null-distribution controls.** Each seed triggers a full "
-            "random-init + embed + probe run. The first pass is slow "
-            "(~1 s/seed native, ~3 s/seed on WASM); reruns are instant "
-            "thanks to `mo.cache`. The **observed** run uses the current "
-            f"settings from sections 1 and 3: seed **{seed_ui.value}**, "
-            f"pool **{pool_ui.value}**, "
-            f"log$_{{10}}\\,C$ = **{log10_C_ui.value:.2f}**."
-        ),
-        mo.hstack([n_null_seeds_ui, null_n_ui]),
-    ])
     return n_null_seeds_ui, null_n_ui
 
 
@@ -1056,7 +1087,7 @@ def _(
     _user_seed = int(seed_ui.value)
 
     # Null seeds: the first N nonnegative integers that aren't the
-    # user's seed. This keeps the null deterministic and lets us talk
+    # user's seed. This keeps the null deterministic and lets me talk
     # about "the first N random inits" as a stable reference set.
     _null_seeds = []
     _k = 0
@@ -1088,7 +1119,7 @@ def _(
         "can produce"
         if p_emp < 0.05
         else "**fail to reject** the random-computation null — "
-        "exactly what we expect, because the 'observed' network is "
+        "exactly what I expect, because the 'observed' network is "
         "itself just another dead salmon"
     )
 
@@ -1108,7 +1139,9 @@ def _(
 @app.cell
 def _(
     log10_C_ui,
+    mo,
     n_exceed,
+    n_null_seeds_ui,
     np,
     null_accs,
     null_mean,
@@ -1117,6 +1150,7 @@ def _(
     p_emp,
     plt,
     pool_ui,
+    seed_ui,
 ):
     # Histogram of null accuracies, observed overlaid as a vertical line,
     # right-tail shaded red. Annotations in the plot carry the p-value and
@@ -1180,14 +1214,25 @@ def _(
     _ax.legend(loc="upper left", fontsize=9, framealpha=0.93)
     _ax.grid(True, axis="y", alpha=0.28)
     _fig.tight_layout()
-    _fig
+    mo.vstack([
+        mo.md(
+            "**Null-distribution controls.** Each seed = full random-init "
+            "+ embed + probe run; cached after the first pass. The blue "
+            "**observed** line uses the upstream seed/pool/log$_{10}$ C "
+            f"sliders (currently seed **{seed_ui.value}**, pool "
+            f"**{pool_ui.value}**, log$_{{10}}\\,C$ = "
+            f"**{log10_C_ui.value:.2f}**)."
+        ),
+        mo.hstack([n_null_seeds_ui, null_n_ui]),
+        _fig,
+    ])
     return
 
 
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    **What just happened.** The blue line is our observed probe
+    **What just happened.** The blue line is my observed probe
     accuracy — the same "highly significant" finding from section 3,
     where a binomial test against chance gave $p$ on the order of
     $10^{-6}$ or smaller. Against the **right** null — the distribution
@@ -1210,10 +1255,10 @@ def _(mo):
     Try nudging the **seed** slider at the top of the notebook. As you
     scan across seeds the blue line slides left and right along the
     gray histogram, because every one of those seeds is itself another
-    dead salmon. The histogram **is** the space of dead salmons; our
+    dead salmon. The histogram **is** the space of dead salmons; my
     observation is one more sample from it. The conventional test
-    asked whether our probe beat chance and got a resounding yes. The
-    paper's test asks the better question — whether our probe beat
+    asked whether my probe beat chance and got a resounding yes. The
+    paper's test asks the better question — whether my probe beat
     random computation — and the answer, as it should be, is no.
     """)
     return
@@ -1226,14 +1271,14 @@ def _(mo):
 
     Sections 1-4 produced two "findings" on a single random architecture
     (BERT-mini) and a single dataset (IMDb sentiment). A reasonable
-    skeptical move at this point: maybe what we're seeing is BERT-specific
+    skeptical move at this point: maybe what I'm seeing is BERT-specific
     — something about self-attention, or about IMDb's particular
     distribution of words and lengths, that lets a random encoder pick up
     the label by accident.
 
     The paper's claim is much stronger than that. The artifact is supposed
     to be a property of **random computation in general**, not any one
-    inductive bias. To test that, we run the same pipeline (random init →
+    inductive bias. To test that, I run the same pipeline (random init →
     pooled embedding → 5-fold CV logistic-regression probe →
     random-computation null) across a small zoo of architectures crossed
     with two datasets. Same tokenization, same probe hyperparameters, same
@@ -1263,7 +1308,7 @@ def _(mo):
     p-values: against chance (the conventional, wrong null) and against
     the random-computation null (the paper's fix).
 
-    The pattern we expect, if the paper is right: $p$ vs. chance is
+    The pattern I expect, if the paper is right: $p$ vs. chance is
     $\ll 0.05$ in **every** cell — significant artifact everywhere — and
     $p$ vs. random computation is approximately uniform on $[0, 1]$,
     failing to reject in basically every cell, because the "observed"
@@ -1274,6 +1319,7 @@ def _(mo):
 
 @app.cell
 def _(mo):
+    # Silent definitions; controls render next to the table and histogram below.
     zoo_archs_ui = mo.ui.multiselect(
         options=["BERT", "GPT-2", "LSTM", "Conv1D", "MLP"],
         value=["BERT", "GPT-2", "LSTM", "MLP"],
@@ -1292,17 +1338,6 @@ def _(mo):
         start=80, stop=300, step=20, value=120,
         label="Sentences per run", show_value=True,
     )
-    mo.vstack([
-        mo.md(
-            "**Zoo controls.** Each (architecture × dataset × seed) is "
-            "one full random-init + embed + probe run, cached. The first "
-            "pass is slow (one forward pass + one probe per cell × seed); "
-            "reruns and slider drags are instant once cached. Defaults are "
-            "tuned to be tolerable in WASM."
-        ),
-        mo.hstack([zoo_archs_ui, zoo_datasets_ui]),
-        mo.hstack([zoo_n_null_ui, zoo_n_ui]),
-    ])
     return zoo_archs_ui, zoo_datasets_ui, zoo_n_null_ui, zoo_n_ui
 
 
@@ -1310,7 +1345,7 @@ def _(mo):
 def _(torch):
     # Custom random architectures for the zoo. All take BERT-tokenized
     # input (input_ids, attention_mask) and return a pooled (B, D)
-    # embedding. The shared interface lets us swap any of them in for the
+    # embedding. The shared interface lets me swap any of them in for the
     # random BERT in section 1's pipeline without changing the downstream
     # probe.
 
@@ -1523,7 +1558,7 @@ def _(
     _logC = float(log10_C_ui.value)
 
     # Seed convention: 0 is the "observed" run, 1..N are the null seeds.
-    # Held constant across (arch, dataset) so we never compare cells on
+    # Held constant across (arch, dataset) so I never compare cells on
     # different seed sets.
     _all_seeds = list(range(_N_null + 1))
 
@@ -1584,8 +1619,8 @@ def _(
 
 
 @app.cell
-def _(plt, zoo_df):
-    # Matplotlib table with color-coded p-value cells. The contrast we
+def _(mo, plt, zoo_archs_ui, zoo_datasets_ui, zoo_df, zoo_n_null_ui, zoo_n_ui):
+    # Matplotlib table with color-coded p-value cells. The contrast I
     # want to surface: every "p vs chance" cell red (significant against
     # the wrong null), every "p vs random comp" cell green
     # (insignificant against the right null) — the paper's fix at a
@@ -1673,12 +1708,31 @@ def _(plt, zoo_df):
         fontsize=13, pad=12, loc="center", fontweight="bold",
     )
     _fig.tight_layout()
-    _fig
+    mo.vstack([
+        mo.md(
+            "**Zoo controls.** Each (architecture × dataset × seed) is "
+            "one full random-init + embed + probe run, cached. First "
+            "pass is slow; slider drags are instant after that."
+        ),
+        mo.hstack([zoo_archs_ui, zoo_datasets_ui]),
+        mo.hstack([zoo_n_null_ui, zoo_n_ui]),
+        _fig,
+    ])
     return
 
 
 @app.cell
-def _(np, plt, zoo_archs_ui, zoo_datasets_ui, zoo_nulls, zoo_obs):
+def _(
+    mo,
+    np,
+    plt,
+    zoo_archs_ui,
+    zoo_datasets_ui,
+    zoo_n_null_ui,
+    zoo_n_ui,
+    zoo_nulls,
+    zoo_obs,
+):
     # One small histogram per (architecture, dataset). Shared x-axis so
     # eyes can compare distributions across the grid. Blue line is the
     # observed seed; gray bars are the random-computation null. If the
@@ -1732,7 +1786,12 @@ def _(np, plt, zoo_archs_ui, zoo_datasets_ui, zoo_nulls, zoo_obs):
         fontsize=11,
     )
     _fig.tight_layout()
-    _fig
+    mo.vstack([
+        mo.md("**Same controls as the table above.** Pick architectures and datasets to display."),
+        mo.hstack([zoo_archs_ui, zoo_datasets_ui]),
+        mo.hstack([zoo_n_null_ui, zoo_n_ui]),
+        _fig,
+    ])
     return
 
 
@@ -1775,12 +1834,73 @@ def _(mo):
     return
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
     ## Takeaways
 
-    **TODO** — write in Day 4, after everything else works.
+    The 2009 salmon was a story about multiple comparisons. Méloux et
+    al.'s salmon is a story about something deeper — about what it even
+    means for an explanation of a neural network to be *correct*. Three
+    things to take away from the experiments above.
+
+    **1. The artifact is real, and it is everywhere.** Pick any
+    architecture in the zoo, any of the two datasets, any seed — the
+    conventional pipeline declares victory. PCs correlate with the
+    label, probes beat chance, binomial tests against $0.5$ return
+    p-values that round to zero. None of those networks have learned
+    anything. What they have are *fixed nonlinear projections of natural
+    language*, and natural-language inputs carry enough marginal
+    structure (token frequencies, length, punctuation, register) that
+    almost any downstream label is going to share variance with almost
+    any random projection of them. The artifact is not a bug in any one
+    method. It is the *default behavior* of every method in the standard
+    interpretability toolbox when the baseline is "is this above
+    chance?"
+
+    **2. The fix is a different null, not a different method.**
+    Section 4 doesn't replace probing or PCA — it replaces the *null
+    distribution*. Instead of asking "is my number above chance?", ask
+    "is my number above what other random initializations of this same
+    architecture produce on this same data?" That is the paper's
+    operational prescription, and it is the one piece of machinery in
+    this notebook that any working interpretability researcher can
+    bolt onto their existing pipeline tomorrow: reseed, rerun, build an
+    empirical null, report a permutation-style p-value. Most published
+    "we found a feature" results would not survive this test, and the
+    ones that do are exactly the ones I should believe.
+
+    **3. The deeper move is to reframe interpretability as inference.**
+    The paper's longer argument is that the dead-salmon problem is a
+    symptom of a structural issue — interpretability tasks are usually
+    *non-identifiable*. Many incompatible explanations fit the same
+    behavior equally well, so an explanation is not "the truth about
+    the network" but a *surrogate model* answering a specific causal
+    query. Their prescription mirrors what neuroscience and
+    psychology learned the hard way after their own replication
+    crises: state the query explicitly, specify the hypothesis class
+    explicitly, quantify uncertainty (posteriors, confidence sets, not
+    point estimates), test against meaningful nulls, and pre-register
+    so the file drawer doesn't do the multiple comparisons for you. A
+    random-computation null is the smallest possible step in that
+    direction. The rest of the program — Bayesian uncertainty over
+    explanations, identifiable query design, meta-analytic standards —
+    is what an interpretability that has grown up actually looks like.
+
+    ---
+
+    The dead salmon never thought about social cognition. The random
+    BERT never read a movie review. The fact that the standard
+    pipeline finds something anyway should be the most interesting
+    result in the paper, not an embarrassment to be hidden. It tells
+    me where the burden of proof actually lives, and gives me a
+    concrete way to discharge it.
+
+    Paper: Méloux, Dirupo, Portet, Peyrard (2025),
+    [*The Dead Salmons of AI Interpretability*](https://arxiv.org/abs/2512.18792).
+    Original 2009 salmon: Bennett, Baird, Miller, Wolford,
+    *Neural correlates of interspecies perspective taking in the
+    post-mortem Atlantic salmon*.
     """)
     return
 
