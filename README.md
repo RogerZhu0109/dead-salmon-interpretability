@@ -8,28 +8,59 @@ app_port: 7860
 pinned: false
 ---
 
-# Dead Salmons of AI Interpretability
+# 🐟 The Dead Salmons of AI Interpretability
 
-An interactive marimo notebook reproducing and extending the central experiments
-from Méloux et al., *The Dead Salmons of AI Interpretability* (arXiv:2512.18792).
+[![Open in HF Spaces](https://huggingface.co/datasets/huggingface/badges/resolve/main/open-in-hf-spaces-sm.svg)](https://huggingface.co/spaces/RZ0109/Dead_Salmon_Interpretability)
+[![arXiv](https://img.shields.io/badge/arXiv-2512.18792-b31b1b.svg)](https://arxiv.org/abs/2512.18792)
+[![marimo](https://marimo.io/shield.svg)](https://marimo.io)
 
-Interpretability methods — probes, PCA, SAEs, circuit discovery — can produce
-plausible-looking, statistically significant "explanations" from **randomly
-initialized networks** that have learned nothing. This notebook shows the
-artifact live and implements the proposed fix: hypothesis testing against a null
-distribution from random computation.
+An interactive marimo notebook reproducing and extending Méloux et al.,
+*The Dead Salmons of AI Interpretability* (arXiv:2512.18792, Dec 2025).
 
-## Sections
+> Interpretability methods — linear probes, PCA, SAEs, circuit discovery —
+> can produce plausible-looking, statistically significant "explanations"
+> from **randomly initialized networks that have learned nothing**.
+> The authors call these artifacts "dead salmons," after a 2009 fMRI study
+> that found significant brain activity in a dead Atlantic salmon.
+> Their proposed fix: treat interpretability as hypothesis testing against
+> a null distribution from random computation.
 
-1. **Hook** — the 2009 Bennett et al. dead salmon fMRI study as analogy
-2. **Setup** — randomly re-initialized bert-tiny, IMDb embeddings
-3. **Artifact A: PCA** — principal components correlating with sentiment
-4. **Artifact B: Probe** — logistic regression with nontrivial CV accuracy
-5. **The Fix** — null distribution + empirical p-value
-6. **Dead Salmon Zoo** — architecture-independent demonstration (MLP, GPT-2-small)
-7. **Probe Complexity Sweep** — how expressive probes find more spurious structure
-8. **Takeaways**
+## What this notebook does
 
-## Paper
+| Section | What you see |
+| --- | --- |
+| **Hook** | The 2009 Bennett et al. dead salmon fMRI analogy |
+| **Setup** | Randomly re-initialized `bert-tiny`, IMDb embeddings with layer/pooling controls |
+| **Artifact A — PCA** | Principal components that "explain" sentiment in a network that learned nothing |
+| **Artifact B — Probe** | Logistic regression achieving well-above-chance CV accuracy on random embeddings |
+| **The Fix** | Null distribution across random seeds + empirical p-value |
+| **Dead Salmon Zoo** | Architecture-independent demo: random MLP, random GPT-2-small |
+| **Probe Complexity Sweep** | How more expressive probes find more spurious structure |
+| **Takeaways** | Three-bullet summary + link back to paper |
 
-Méloux, Dirupo, Portet, Peyrard (2025). [arXiv:2512.18792](https://arxiv.org/abs/2512.18792)
+Every quantitative section has interactive `mo.ui` sliders and dropdowns — move them and watch the artifact appear and disappear.
+
+## Run it
+
+**Interactive (recommended):** [Open in HF Spaces](https://huggingface.co/spaces/RZ0109/Dead_Salmon_Interpretability)
+
+**Locally:**
+```bash
+git clone https://github.com/RogerZhu0109/dead-salmon-interpretability
+cd dead-salmon-interpretability
+pip install marimo
+marimo edit --sandbox notebooks/walkthrough.py
+```
+
+## Stack
+
+- [marimo](https://marimo.io) — reactive notebook, deployed as a server-side app
+- PyTorch + HuggingFace Transformers — random-init `prajjwal1/bert-tiny`
+- scikit-learn — probes and PCA
+- Hosted on HuggingFace Spaces (Docker, CPU)
+
+## Reference
+
+Méloux, A., Dirupo, G., Portet, F., & Peyrard, M. (2025).
+*The Dead Salmons of AI Interpretability.*
+[arXiv:2512.18792](https://arxiv.org/abs/2512.18792)
