@@ -1,0 +1,12 @@
+marimo>=0.23.3
+numpy
+scipy
+scikit-learn
+matplotlib
+pandas
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch
+transformers
+datasets
+
+
