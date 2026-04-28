@@ -1,13 +1,3 @@
----
-title: Dead Salmons of AI Interpretability
-emoji: 🐟
-colorFrom: indigo
-colorTo: red
-sdk: docker
-app_port: 7860
-pinned: false
----
-
 # 🐟 The Dead Salmons of AI Interpretability
 
 [![Open in HF Spaces](https://huggingface.co/datasets/huggingface/badges/resolve/main/open-in-hf-spaces-sm.svg)](https://huggingface.co/spaces/RZ0109/Dead_Salmon_Interpretability)
